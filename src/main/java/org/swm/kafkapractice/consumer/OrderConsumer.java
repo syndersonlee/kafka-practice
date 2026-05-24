@@ -1,36 +1,49 @@
 package org.swm.kafkapractice.consumer;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import org.swm.kafkapractice.event.OrderEvent;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class OrderConsumer {
 
+    private final OrderProcessingService processingService;
+
     @KafkaListener(topics = "orders", groupId = "order-processor")
-    public void consume(ConsumerRecord<String, OrderEvent> record, Acknowledgment ack) {
-        OrderEvent event = record.value();
+    public void consume(ConsumerRecord<String, OrderEvent> record,
+                        Acknowledgment ack,
+                        @Header(value = "event-id", required = false) String eventIdHeader) {
+
+        String eventId = (eventIdHeader != null && !eventIdHeader.isBlank())
+                ? eventIdHeader
+                : fallbackKey(record);
+
         try {
-            log.info("Received. partition={}, offset={}, key={}, event={}",
-                    record.partition(), record.offset(), record.key(), event);
-
-            process(event);
-
-            ack.acknowledge();   // 처리 성공 후 수동 커밋
+            OrderProcessingService.ProcessResult result =
+                    processingService.process(eventId, record.topic(), record.value());
+            log.info("Consumed. partition={}, offset={}, eventId={}, result={}",
+                    record.partition(), record.offset(), eventId, result);
+            ack.acknowledge();
+        } catch (IllegalArgumentException e) {
+            // 영구 오류 — 실습 05 의 ErrorHandler 가 즉시 DLT 처리
+            log.warn("Permanent failure. eventId={}, reason={}", eventId, e.getMessage());
+            throw e;
         } catch (Exception e) {
-            // ack 안 하면 다음 poll 에서 같은 메시지 재수신 → 무한 루프 위험
-            // 실습 05 에서 ErrorHandler 로 정식 처리
-            log.error("Failed to process. orderId={}", event.getOrderId(), e);
-            throw e;   // 일단 던져서 Spring Kafka 기본 ErrorHandler 가 잡도록
+            // 일시 오류 — ErrorHandler 가 재시도
+            log.error("Transient failure. eventId={}", eventId, e);
+            throw e;
         }
     }
 
-    private void process(OrderEvent event) {
-        // 실제로는 DB 저장, 외부 API 호출 등
-        log.info("Processed: {}", event);
+    private String fallbackKey(ConsumerRecord<?, ?> record) {
+        // Producer 가 event-id 헤더를 안 보낸 레거시 케이스용 fallback
+        return record.topic() + "-" + record.partition() + "-" + record.offset();
     }
 }
