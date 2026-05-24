@@ -9,6 +9,9 @@ import org.swm.kafkapractice.config.KafkaTopicConfig;
 import org.swm.kafkapractice.event.OrderEvent;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @Component
@@ -34,5 +37,27 @@ public class OrderProducer {
                     result.getRecordMetadata().partition(),
                     result.getRecordMetadata().offset());
         });
+    }
+
+    /**
+     * 동기 발행 — broker 장애 결과를 즉시 받아 사용자에게 503 으로 노출.
+     * delivery.timeout.ms (60s) 보다 살짝 긴 70초 timeout.
+     */
+    public void sendSync(OrderEvent event) {
+        try {
+            SendResult<String, OrderEvent> result = kafkaTemplate
+                    .send(KafkaTopicConfig.ORDERS_TOPIC, event.getOrderId(), event)
+                    .get(70, TimeUnit.SECONDS);
+            log.info("Sent sync. orderId={}, partition={}, offset={}",
+                    event.getOrderId(),
+                    result.getRecordMetadata().partition(),
+                    result.getRecordMetadata().offset());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while sending", e);
+        } catch (ExecutionException | TimeoutException e) {
+            log.error("Send failed permanently. orderId={}", event.getOrderId(), e);
+            throw new IllegalStateException("Kafka publish failed", e);
+        }
     }
 }
