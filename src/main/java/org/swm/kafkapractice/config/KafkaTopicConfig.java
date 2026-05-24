@@ -9,6 +9,7 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaTopicConfig {
 
     public static final String ORDERS_TOPIC = "orders";
+    public static final String ORDERS_DLT_TOPIC = "orders.DLT";
 
     @Bean
     public NewTopic ordersTopic() {
@@ -16,6 +17,14 @@ public class KafkaTopicConfig {
                 .partitions(3)
                 .replicas(3)
                 .config("min.insync.replicas", "2")
+                .build();
+    }
+
+    @Bean
+    public NewTopic ordersDltTopic() {
+        return TopicBuilder.name(ORDERS_DLT_TOPIC)
+                .partitions(3)
+                .replicas(3)
                 .build();
     }
 }

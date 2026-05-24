@@ -36,11 +36,27 @@ public class OrderProcessingService {
     }
 
     private void applyBusinessLogic(OrderEvent event) {
+        // 실습 05 시뮬레이션
+        // - amount<0 → IllegalArgumentException (영구 오류, 즉시 DLT)
+        // - amount==999 → 일시 오류 (재시도 후 DLT)
         if (event.getAmount() < 0) {
             throw new IllegalArgumentException("Negative amount: " + event.getAmount());
         }
+        if (event.getAmount() == 999) {
+            throw new TransientFailureException("simulated transient error");
+        }
         log.info("Business logic applied. event={}", event);
         // orderRepository.save(...) 등
+    }
+
+    /**
+     * 일시 오류 (외부 API 5xx, 네트워크 timeout 등) 를 단일 unchecked 예외로 표현.
+     * ErrorHandler 의 addNotRetryableExceptions 에 등록되지 않은 예외라 재시도 대상.
+     */
+    public static class TransientFailureException extends RuntimeException {
+        public TransientFailureException(String message) {
+            super(message);
+        }
     }
 
     public enum ProcessResult {
