@@ -1,0 +1,101 @@
+name: kafka-practice
+
+# KRaft 모드 3-broker 클러스터
+# - Zookeeper 없이 broker가 controller 역할도 수행
+# - 각 브로커는 호스트에서 9092 / 9094 / 9096 로 접근 가능
+# - 컨테이너 내부 통신은 29092 사용 (DOCKER 리스너)
+#
+# 사전 작업:
+#   CLUSTER_ID는 한 번 정해진 값을 유지해야 함. 컨테이너 재생성하면서
+#   ID가 어긋나면 부팅 실패. 볼륨까지 깔끔히 지우려면 `docker compose down -v`.
+
+x-kafka-common: &kafka-common
+  image: confluentinc/cp-kafka:7.6.1
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+    interval: 10s
+    timeout: 5s
+    retries: 10
+    start_period: 30s
+
+x-kafka-env: &kafka-env
+  KAFKA_PROCESS_ROLES: 'broker,controller'
+  KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,DOCKER:PLAINTEXT'
+  KAFKA_INTER_BROKER_LISTENER_NAME: 'DOCKER'
+  KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:9093,2@kafka2:9093,3@kafka3:9093'
+  # 기본 토픽 설정 — 실습 토픽이 따로 지정하지 않으면 이 값을 따름
+  KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+  KAFKA_MIN_INSYNC_REPLICAS: 2
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+  # 그룹 초기 리밸런싱 지연 — 학습용으로 0으로 낮춰서 즉시 반응 확인
+  KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+
+services:
+  kafka1:
+    <<: *kafka-common
+    container_name: kafka1
+    hostname: kafka1
+    ports:
+      - "9092:9092"
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,DOCKER://0.0.0.0:29092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://localhost:9092,DOCKER://kafka1:29092'
+    volumes:
+      - kafka1-data:/var/lib/kafka/data
+
+  kafka2:
+    <<: *kafka-common
+    container_name: kafka2
+    hostname: kafka2
+    ports:
+      - "9094:9094"
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9094,CONTROLLER://0.0.0.0:9093,DOCKER://0.0.0.0:29092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://localhost:9094,DOCKER://kafka2:29092'
+    volumes:
+      - kafka2-data:/var/lib/kafka/data
+
+  kafka3:
+    <<: *kafka-common
+    container_name: kafka3
+    hostname: kafka3
+    ports:
+      - "9096:9096"
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9096,CONTROLLER://0.0.0.0:9093,DOCKER://0.0.0.0:29092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://localhost:9096,DOCKER://kafka3:29092'
+    volumes:
+      - kafka3-data:/var/lib/kafka/data
+
+  # 웹 UI — 토픽/컨슈머 그룹/메시지를 브라우저로 확인. http://localhost:8089
+  # (Spring Boot 앱이 :8080 이라 8089 로 변경)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: unless-stopped
+    ports:
+      - "8089:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: kafka-practice
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka1:29092,kafka2:29092,kafka3:29092'
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+
+volumes:
+  kafka1-data:
+  kafka2-data:
+  kafka3-data:

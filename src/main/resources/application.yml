@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: kafka-practice
+
+  kafka:
+    bootstrap-servers: localhost:9092,localhost:9094,localhost:9096
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+
+    consumer:
+      group-id: order-processor
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        spring.json.trusted.packages: "org.swm.kafkapractice.*"
+
+    listener:
+      ack-mode: manual_immediate
+      concurrency: 3       # 토픽 파티션 수와 맞춤 (=병렬 컨슈머 스레드 수)
+
+server:
+  port: ${SERVER_PORT:8080}
+
+logging:
+  level:
+    org.apache.kafka: WARN
+    org.springframework.kafka: INFO
