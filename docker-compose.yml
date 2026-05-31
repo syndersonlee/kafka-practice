@@ -13,7 +13,9 @@ x-kafka-common: &kafka-common
   image: confluentinc/cp-kafka:7.6.1
   restart: unless-stopped
   healthcheck:
-    test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+    # 모든 broker가 공유하는 DOCKER 리스너(29092)로 검사.
+    # localhost:9092 로 하면 kafka2/3 은 9094/9096 에서 listen 하므로 항상 unhealthy 로 오탐된다.
+    test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
     interval: 10s
     timeout: 5s
     retries: 10
