@@ -3,6 +3,10 @@ spring:
     name: kafka-practice
 
   datasource:
+    # ⚠️ 인메모리 H2 는 인스턴스마다 별도 DB 다. 따라서 같은 그룹의 인스턴스 2개를
+    #    띄우는 시나리오에서는 processed_events 기반 멱등이 인스턴스 간에 공유되지 않는다
+    #    (각자 자기 메모리 DB 만 본다). 인스턴스 간 멱등이 필요하면 공유 RDB(PostgreSQL 등)
+    #    또는 파일 H2(jdbc:h2:file:./data/practice;AUTO_SERVER=TRUE)로 교체해야 한다.
     url: jdbc:h2:mem:practice;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
     driver-class-name: org.h2.Driver
     username: sa
